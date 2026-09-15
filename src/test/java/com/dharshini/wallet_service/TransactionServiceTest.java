@@ -48,4 +48,28 @@ class TransactionServiceTest {
 
         assertEquals(0, response.getBalance().compareTo(new BigDecimal("800.00")));
     }
+    @Test
+    void shouldCreditWalletSuccessfully() {
+
+        UUID userId = UUID.randomUUID();
+
+        Wallet wallet = Wallet.builder()
+                .userId(userId)
+                .balance(new BigDecimal("1000"))
+                .build();
+
+        walletRepository.save(wallet);
+
+        TransactionRequest request = TransactionRequest.builder()
+                .transactionId(UUID.randomUUID())
+                .userId(userId)
+                .amount(new BigDecimal("300"))
+                .type(TransactionType.CREDIT)
+                .build();
+
+        TransactionResponse response =
+                transactionService.processTransaction(request);
+
+        assertEquals(new BigDecimal("1300.00"), response.getBalance());
+    }
 }
