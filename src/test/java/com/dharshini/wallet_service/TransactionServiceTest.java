@@ -1,4 +1,5 @@
 package com.dharshini.wallet_service;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -130,5 +131,68 @@ class TransactionServiceTest {
 
         assertEquals(0,
                 updatedWallet.getBalance().compareTo(new BigDecimal("900.00")));
+    }
+    @Test
+    @DisplayName("Sends 10 concurrent debit requests of ₹100 for a wallet with ₹500 balance. Ensures the final balance is exactly ₹0 and 5 requests fail with insufficient funds.")
+    void shouldHandleConcurrentDebitRequests() throws Exception {
+
+        UUID userId = UUID.randomUUID();
+
+        Wallet wallet = Wallet.builder()
+                .userId(userId)
+                .balance(new BigDecimal("500"))
+                .build();
+
+        walletRepository.save(wallet);
+
+        ExecutorService executor = Executors.newFixedThreadPool(10);
+        CountDownLatch latch = new CountDownLatch(10);
+
+        AtomicInteger successCount = new AtomicInteger();
+        AtomicInteger failureCount = new AtomicInteger();
+
+        for (int i = 0; i < 10; i++) {
+
+            executor.submit(() -> {
+
+                try {
+
+                    TransactionRequest request = TransactionRequest.builder()
+                            .transactionId(UUID.randomUUID())
+                            .userId(userId)
+                            .amount(new BigDecimal("100"))
+                            .type(TransactionType.DEBIT)
+                            .build();
+
+                    transactionService.processTransaction(request);
+
+                    successCount.incrementAndGet();
+
+                } catch (Exception e) {
+
+                    failureCount.incrementAndGet();
+
+                } finally {
+
+                    latch.countDown();
+
+                }
+
+            });
+
+        }
+
+        latch.await(10, TimeUnit.SECONDS);
+        executor.shutdown();
+
+        Wallet updatedWallet =
+                walletRepository.findByUserId(userId).orElseThrow();
+
+        assertEquals(0,
+                updatedWallet.getBalance().compareTo(BigDecimal.ZERO));
+
+        assertEquals(5, successCount.get());
+
+        assertEquals(5, failureCount.get());
     }
 }
